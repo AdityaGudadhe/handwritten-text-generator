@@ -28,7 +28,7 @@ def save_images(images, path, **kwargs):
 
 
 
-def preprocess_csv(csv_file, samples_per_label=10000):
+def preprocess_csv(csv_file, samples_per_label=100):
     # Read the CSV file into a DataFrame
     df = pd.read_csv(csv_file)
 
@@ -82,7 +82,7 @@ class CustomCSVImageDataset(Dataset):
         return image, label
 
 def get_data(args):
-    sampled_df = preprocess_csv(args.dataset_path, samples_per_label=10000)
+    sampled_df = preprocess_csv(args.dataset_path, samples_per_label=100)
 
     transforms = torchvision.transforms.Compose([
         torchvision.transforms.Grayscale(num_output_channels=3),

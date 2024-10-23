@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import PreTrainedModel, PretrainedConfig
+from huggingface_hub import PyTorchModelHubMixin
 
 class EMA:
     def __init__(self, beta):
@@ -31,7 +32,7 @@ class EMA:
         ema_model.load_state_dict(model.state_dict())
 
 
-class SelfAttention(nn.Module):
+class SelfAttention(nn.Module, PyTorchModelHubMixin):
     def __init__(self, channels, size):
         super(SelfAttention, self).__init__()
         self.channels = channels
@@ -54,7 +55,7 @@ class SelfAttention(nn.Module):
         return attention_value.swapaxes(2, 1).view(-1, self.channels, self.size, self.size)
 
 
-class DoubleConv(nn.Module):
+class DoubleConv(nn.Module, PyTorchModelHubMixin):
     def __init__(self, in_channels, out_channels, mid_channels=None, residual=False):
         super().__init__()
         self.residual = residual
@@ -75,7 +76,7 @@ class DoubleConv(nn.Module):
             return self.double_conv(x)
 
 
-class Down(nn.Module):
+class Down(nn.Module, PyTorchModelHubMixin):
     def __init__(self, in_channels, out_channels, emb_dim=256):
         super().__init__()
         self.maxpool_conv = nn.Sequential(
@@ -98,7 +99,7 @@ class Down(nn.Module):
         return x + emb
 
 
-class Up(nn.Module):
+class Up(nn.Module, PyTorchModelHubMixin):
     def __init__(self, in_channels, out_channels, emb_dim=256):
         super().__init__()
 
@@ -124,8 +125,8 @@ class Up(nn.Module):
         return x + emb
 
 
-class UNet(nn.Module):
-    def __init__(self, c_in=3, c_out=3, time_dim=256, device="cpu"):
+class UNet(nn.Module, PyTorchModelHubMixin):
+    def __init__(self, c_in=3, c_out=3, time_dim=256, device="cuda"):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
@@ -184,24 +185,13 @@ class UNet(nn.Module):
         output = self.outc(x)
         return output
     
-class UNetConfig(PretrainedConfig):
-    model_type = "unet_conditional"
 
-    def __init__(self, c_in=3, c_out=3, time_dim=256, num_classes=None, device="cpu", **kwargs):
-        super().__init__(**kwargs)
-        self.c_in = c_in
-        self.c_out = c_out
-        self.time_dim = time_dim
-        self.num_classes = num_classes
+class UNet_conditional(nn.Module, PyTorchModelHubMixin):
+    def __init__(self, c_in=3, c_out=3, time_dim=256, num_classes=None, device="cuda", **kwargs):
+        super().__init__()
         self.device = device
-
-class UNet_conditional(PreTrainedModel):
-    config_class = UNetConfig
-    def __init__(self, config):
-        super().__init__(config)
-        self.model_device = config.device
-        self.time_dim = config.time_dim
-        self.inc = DoubleConv(config.c_in, 64)
+        self.time_dim = time_dim
+        self.inc = DoubleConv(c_in, 64)
         self.down1 = Down(64, 128)
         self.sa1 = SelfAttention(128, 32)
         self.down2 = Down(128, 256)
@@ -219,10 +209,10 @@ class UNet_conditional(PreTrainedModel):
         self.sa5 = SelfAttention(64, 32)
         self.up3 = Up(128, 64)
         self.sa6 = SelfAttention(64, 64)
-        self.outc = nn.Conv2d(64, config.c_out, kernel_size=1)
+        self.outc = nn.Conv2d(64, c_out, kernel_size=1)
 
-        if config.num_classes is not None:
-            self.label_emb = nn.Embedding(config.num_classes, config.time_dim)
+        if num_classes is not None:
+            self.label_emb = nn.Embedding(num_classes, time_dim)
 
     def pos_encoding(self, t, channels):
         inv_freq = 1.0 / (
@@ -264,8 +254,8 @@ class UNet_conditional(PreTrainedModel):
 
 
 if __name__ == '__main__':
-    # net = UNet(device="cpu")
-    net = UNet_conditional(num_classes=10, device="cpu")
+    # net = UNet(device="cuda")
+    net = UNet_conditional(num_classes=10, device="cuda")
     print(sum([p.numel() for p in net.parameters()]))
     x = torch.randn(3, 3, 64, 64)
     t = x.new_tensor([500] * x.shape[0]).long()
